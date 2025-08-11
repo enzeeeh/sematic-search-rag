@@ -96,17 +96,7 @@ flowchart TD
 ### 1.1 Raw Data Ingestion
 **Purpose**: Load product catalog from various sources for processing
 
-**Data Sources Supported**:
-- E-commerce platforms (Shopify, WooCommerce, BigCommerce)
-- Product feeds (XML, CSV, JSON)
-- REST APIs and GraphQL endpoints
-- Database exports (MySQL, PostgreSQL)
-
-**Ingestion Strategy**:
-- **Multi-source aggregation**: Combine data from different platforms
-- **Incremental updates**: Handle new products and price changes
-- **Data validation**: Check completeness and format consistency
-- **Error handling**: Log and queue failed imports for manual review
+**Process**: Extract product data from multiple sources (e-commerce platforms, feeds, APIs) with validation and error handling for consistent catalog building.
 
 ### 1.2 Schema Validation
 **Purpose**: Ensure data quality and consistency before processing
@@ -556,142 +546,74 @@ Examples:
 
 ## 4. Performance Components
 
-### 4.1 Pre-filtering Optimization
-**Purpose**: Reduce search space by applying metadata filters before vector similarity search
+### Performance Monitoring & Key Metrics
 
-**Pre-filtering Strategy**:
-- **Early Elimination**: Filter products by brand, category, price, and availability before embedding comparison
-- **Index Utilization**: Leverage database indexes on metadata fields for fast filtering
-- **Compound Filtering**: Combine multiple filter conditions with AND/OR logic
-- **Dynamic Thresholds**: Adjust filter strictness based on result quantity
+**Purpose**: Track system performance to ensure optimal search speed, accuracy, and resource utilization.
 
-**Filtering Process**:
-1. **Parse Query Filters**: Extract brand, category, price range from user query
-2. **Build Filter Conditions**: Convert to database-compatible WHERE clauses
-3. **Execute Metadata Query**: Apply filters to product metadata index
-4. **Candidate Selection**: Return IDs of products matching all filters
-5. **Vector Search Scope**: Limit embedding search to filtered candidates only
+### 4.1 Core Performance Metrics
 
-**Performance Impact**:
-| Scenario | Without Pre-filtering | With Pre-filtering | Improvement |
-|----------|----------------------|-------------------|-------------|
-| **Large Catalog** (1M products) | 1200ms | 480ms | 60% faster |
-| **Brand Filter** (10K → 1K products) | 800ms | 320ms | 60% faster |
-| **Category Filter** (50K → 5K products) | 900ms | 450ms | 50% faster |
-| **Price Range** (100K → 20K products) | 850ms | 510ms | 40% faster |
+| Metric Category | Key Indicators | Target Values | Why Monitor |
+|-----------------|---------------|---------------|-------------|
+| **Response Time** | Query processing latency | <200ms (95th percentile) | User experience and search responsiveness |
+| **Search Quality** | Confidence score distribution | >0.6 for 85%+ queries | Ensure relevant results and reduce fallbacks |
+| **Resource Usage** | Memory consumption, CPU utilization | <80% peak usage | Prevent system overload and crashes |
+| **Cache Performance** | Hit rate, miss rate | 85%+ hit rate | Optimize response speed and reduce compute costs |
 
-**Optimization Techniques**:
-- **Bitmap Indexes**: Fast boolean operations on categorical data
-- **Range Partitioning**: Efficient price range queries using partitioned tables
-- **Composite Indexes**: Multi-column indexes for common filter combinations
-- **Filter Selectivity**: Apply most selective filters first to maximize reduction
+### 4.2 Performance Optimization Techniques
 
-### 4.2 HNSW Indexing
-**Purpose**: Enable fast approximate nearest neighbor search for high-dimensional embeddings
+**Pre-filtering Optimization**:
+- **Metric**: Search space reduction percentage
+- **Target**: 40-60% reduction in candidate products
+- **Example**: Brand filter reduces 1M products → 100K products before vector search
+- **Why**: Dramatically reduces vector search time from 1200ms → 480ms
 
-**HNSW (Hierarchical Navigable Small World) Benefits**:
-- **Logarithmic Search**: O(log N) average search complexity vs O(N) for brute force
-- **High Recall**: 95%+ recall at 10x+ speed improvement over exact search
-- **Memory Efficient**: Compact graph structure with configurable memory usage
-- **Incremental Updates**: Add new vectors without full index rebuild
+**HNSW Vector Indexing**:
+- **Metric**: Search speed improvement vs exact search
+- **Target**: 10-1400x faster depending on catalog size
+- **Example**: 1M products: 5000ms (exact) → 25ms (HNSW) = 200x improvement
+- **Why**: Enables real-time search on large product catalogs
 
-**Index Configuration**:
-```json
-{
-  "index_type": "hnsw",
-  "distance_metric": "cosine",
-  "parameters": {
-    "M": 16,              // Max connections per node (trade-off: recall vs memory)
-    "ef_construction": 200, // Search width during construction (higher = better quality)
-    "ef_search": 100       // Search width during query (higher = better recall)
-  }
-}
+**Multi-Level Query Caching**:
+- **Metric**: Cache hit rate by layer (L1, L2, L3)
+- **Target**: L1: 50%+, L2: 30%+, L3: 20%+
+- **Example**: Cached query: 5ms vs fresh search: 150ms = 30x faster
+- **Why**: Instant responses for popular queries, reduced server load
+
+### 4.3 Performance Monitoring Dashboard
+
+**Real-time Metrics to Track**:
+```
+Search Performance:
+├── Average Response Time: 95ms
+├── 95th Percentile: 180ms  
+├── Queries/second: 450
+└── Confidence Distribution:
+    ├── High (>0.8): 65%
+    ├── Good (0.6-0.8): 25%
+    └── Low (<0.6): 10%
+
+Resource Utilization:
+├── Memory Usage: 4.2GB / 8GB (52%)
+├── CPU Usage: 35%
+├── Vector DB Size: 2.1GB
+└── Cache Memory: 2.2GB
+
+Cache Performance:
+├── Overall Hit Rate: 87%
+├── L1 Cache: 52% (1K queries)
+├── L2 Cache: 28% (Redis)
+└── L3 Cache: 20% (Database)
 ```
 
-**Performance Characteristics**:
-| Vector Count | Exact Search | HNSW Search | Speed Improvement | Recall |
-|--------------|-------------|-------------|------------------|--------|
-| **10K vectors** | 50ms | 5ms | 10x faster | 98% |
-| **100K vectors** | 500ms | 15ms | 33x faster | 96% |
-| **1M vectors** | 5000ms | 25ms | 200x faster | 95% |
-| **10M vectors** | 50000ms | 35ms | 1400x faster | 94% |
+**Alert Thresholds**:
+- **Response Time**: >500ms (95th percentile)
+- **Low Confidence**: >20% of queries with confidence <0.6
+- **Memory Usage**: >85% of available RAM
+- **Cache Hit Rate**: <75% overall hit rate
 
-**Index Optimization Strategies**:
-- **Parameter Tuning**: Adjust M and ef values based on dataset size and accuracy requirements
-- **Memory Management**: Monitor RAM usage and configure index size limits
-- **Build Optimization**: Use parallel construction for faster initial indexing
-- **Query Optimization**: Dynamic ef_search adjustment based on query complexity
-
-**Trade-off Considerations**:
-- **M Parameter**: Higher values improve recall but increase memory usage
-- **Construction Time**: Better quality indexes take longer to build initially
-- **Memory vs Speed**: Larger indexes provide faster search but consume more RAM
-- **Update Frequency**: Frequent updates may require index rebuilding for optimal performance
-
-### 4.3 Query Caching
-**Purpose**: Store frequently accessed query results for instant response delivery
-
-**Caching Strategy**:
-- **Multi-level Caching**: L1 (in-memory), L2 (Redis), L3 (database cache)
-- **Intelligent Expiration**: Time-based TTL with usage-based refresh
-- **Cache Warming**: Pre-populate cache with popular query patterns
-- **Selective Caching**: Cache only high-confidence, stable results
-
-**Cache Key Structure**:
-```
-cache_key = hash(
-  query_text + 
-  filters_applied + 
-  search_parameters + 
-  result_limit
-)
-
-Example: "headphones_under_100_sony_limit_10" → "cache_a7b2c1d4e5f6"
-```
-
-**Caching Layers**:
-
-| Layer | Technology | Capacity | TTL | Use Case |
-|-------|------------|----------|-----|----------|
-| **L1 Cache** | In-Memory Dict | 1K queries | 5 minutes | Ultra-frequent queries |
-| **L2 Cache** | Redis | 100K queries | 30 minutes | Popular queries |
-| **L3 Cache** | Database | 1M queries | 24 hours | Stable, complex queries |
-
-**Cache Performance Metrics**:
-- **Hit Rate**: Target 85%+ for popular query patterns
-- **Response Time**: <5ms for cached results vs 50-200ms for fresh searches
-- **Memory Usage**: Monitor cache size and eviction patterns
-- **Invalidation Rate**: Track how often cached results become stale
-
-**Cache Invalidation Strategies**:
-1. **Time-based Expiration**: Automatic TTL for all cached entries
-2. **Event-based Invalidation**: Clear cache when product catalog updates
-3. **Usage-based Refresh**: Extend TTL for frequently accessed results
-4. **Confidence-based Caching**: Only cache high-confidence results (>0.8)
-
-**Advanced Caching Features**:
-- **Partial Result Caching**: Cache intermediate search results for faster filtering
-- **Similarity Clustering**: Cache results for similar queries using embedding similarity
-- **Preemptive Refresh**: Refresh expiring cache entries in background
-- **Cache Analytics**: Monitor hit rates and optimize caching strategies
-
-**Cache Size Management**:
-```
-Total Cache Memory = (avg_result_size × cached_queries × cache_layers)
-
-Example Calculation:
-- Average result size: 2KB per query
-- L1 cache: 1K queries = 2MB
-- L2 cache: 100K queries = 200MB  
-- L3 cache: 1M queries = 2GB
-- Total memory footprint: ~2.2GB
-```
-
-**Performance Impact Summary**:
-| Optimization | Implementation Complexity | Performance Gain | Memory Cost |
-|--------------|--------------------------|------------------|-------------|
-| **Pre-filtering** | Low | 40-60% faster | Minimal |
-| **HNSW Indexing** | Medium | 10-1400x faster | Moderate |
-| **Query Caching** | Medium | 90%+ hit rate | Significant |
-| **Combined** | High | 95%+ queries <50ms | Manageable |
+**Example Performance Baseline**:
+- **Small Catalog** (10K products): 50ms average response
+- **Medium Catalog** (100K products): 150ms average response  
+- **Large Catalog** (1M+ products): 200ms average response
+- **Peak Load**: 1000+ queries/second with <300ms response time
 
